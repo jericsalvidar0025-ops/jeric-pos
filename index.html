@@ -6,37 +6,21 @@
 <title>Jeric POS - Login / Register</title>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
 <style>
-*{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'Poppins',sans-serif;background:#0a1a22;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;}
-.container{background:rgba(0,255,204,0.05);padding:30px;border-radius:12px;width:350px;text-align:center;}
-h2{color:#00ffcc;margin-bottom:20px;}
-input{width:100%;padding:10px;margin:8px 0;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;}
-button{padding:10px 20px;border:none;border-radius:6px;background:#00ffcc;color:#000;font-weight:600;cursor:pointer;transition:all 0.2s;margin-top:10px;}
-button:hover{opacity:0.85;transform:scale(1.05);}
-.toggle-link{color:#00ffcc;cursor:pointer;margin-top:10px;display:block;}
-.error{color:#ff4d4d;margin:8px 0;}
+body{font-family:'Poppins',sans-serif;background:#0a1a22;color:#fff;margin:0;padding:0;display:flex;justify-content:center;align-items:center;height:100vh;}
+.container{background:rgba(255,255,255,0.05);padding:30px;border-radius:10px;width:300px;}
+h2{color:#00ffcc;text-align:center;}
+input{width:100%;padding:10px;margin:6px 0;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;}
+button{width:100%;padding:10px;margin:6px 0;border:none;border-radius:6px;cursor:pointer;font-weight:600;}
+.primary{background:#00ffcc;color:#000;}
 </style>
 </head>
 <body>
 <div class="container">
-  <h2 id="formTitle">Login</h2>
-  <div id="errorMsg" class="error"></div>
-
-  
-  <div id="loginForm">
-    <input type="email" id="loginEmail" placeholder="Email">
-    <input type="password" id="loginPassword" placeholder="Password">
-    <button id="loginBtn">Login</button>
-    <span class="toggle-link" onclick="toggleForm()">Create Account</span>
-  </div>
-
-  <div id="registerForm" style="display:none;">
-    <input type="email" id="regEmail" placeholder="Email">
-    <input type="password" id="regPassword" placeholder="Password (min 6 chars)">
-    <input type="password" id="regConfirm" placeholder="Confirm Password">
-    <button id="registerBtn">Register</button>
-    <span class="toggle-link" onclick="toggleForm()">Back to Login</span>
-  </div>
+  <h2>Jeric POS</h2>
+  <input type="email" id="email" placeholder="Email">
+  <input type="password" id="password" placeholder="Password">
+  <button id="loginBtn" class="primary">Login</button>
+  <button id="registerBtn" class="primary">Register</button>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-app-compat.js"></script>
@@ -44,69 +28,54 @@ button:hover{opacity:0.85;transform:scale(1.05);}
 <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore-compat.js"></script>
 
 <script>
+// Firebase config
 const firebaseConfig = {
-  apiKey: "AIzaSyDd_04phC5KuoSnpC-mg6ASGFlRVX_d4Dk",
-  authDomain: "jeric-pos.firebaseapp.com",
-  projectId: "jeric-pos",
-  storageBucket: "jeric-pos.appspot.com",
-  messagingSenderId: "294868456105",
-  appId: "1:294868456105:web:03c3e18a7037afbad80fb8",
-  measurementId: "G-3HXS3DFFMB"
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
 };
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-function toggleForm(){
-  const loginForm = document.getElementById("loginForm");
-  const registerForm = document.getElementById("registerForm");
-  const title = document.getElementById("formTitle");
-  document.getElementById("errorMsg").textContent="";
-  if(loginForm.style.display==="none"){
-    loginForm.style.display="block";
-    registerForm.style.display="none";
-    title.textContent="Login";
-  }else{
-    loginForm.style.display="none";
-    registerForm.style.display="block";
-    title.textContent="Create Account";
-  }
-}
+// Redirect logged in users
+auth.onAuthStateChanged(async user => {
+  if(!user) return;
+  const doc = await db.collection("users").doc(user.uid).get();
+  if(!doc.exists) return auth.signOut();
+  const role = doc.data().role;
+  if(role==="admin"){ location.href="admin.html"; }
+  else { location.href="shop.html"; }
+});
 
-document.getElementById("loginBtn").onclick=async ()=>{
-  const email = document.getElementById("loginEmail").value.trim();
-  const password = document.getElementById("loginPassword").value;
-  const errorMsg = document.getElementById("errorMsg");
-  errorMsg.textContent="";
-  if(!email||!password){errorMsg.textContent="Enter email and password"; return;}
+// Login
+document.getElementById("loginBtn").onclick = async () => {
+  const email=document.getElementById("email").value.trim();
+  const password=document.getElementById("password").value;
+  if(!email||!password){ alert("Fill all fields"); return; }
   try{
-    const userCred = await auth.signInWithEmailAndPassword(email,password);
-    const doc = await db.collection("users").doc(userCred.user.uid).get();
-    const role = doc.data().role || "customer";
-    if(role==="admin") location.href="admin.html";
-    else location.href="shop.html";
-  }catch(e){errorMsg.textContent=e.message;}
+    await auth.signInWithEmailAndPassword(email,password);
+  }catch(e){ alert(e.message); }
 };
 
-document.getElementById("registerBtn").onclick=async ()=>{
-  const email = document.getElementById("regEmail").value.trim();
-  const password = document.getElementById("regPassword").value;
-  const confirm = document.getElementById("regConfirm").value;
-  const errorMsg = document.getElementById("errorMsg");
-  errorMsg.textContent="";
-  if(!email||!password||!confirm){errorMsg.textContent="Fill all fields"; return;}
-  if(password!==confirm){errorMsg.textContent="Passwords do not match"; return;}
-  if(password.length<6){errorMsg.textContent="Password must be at least 6 characters"; return;}
+// Register
+document.getElementById("registerBtn").onclick = async () => {
+  const email=document.getElementById("email").value.trim();
+  const password=document.getElementById("password").value;
+  if(!email||!password){ alert("Fill all fields"); return; }
   try{
     const userCred = await auth.createUserWithEmailAndPassword(email,password);
+    // Save user data
     await db.collection("users").doc(userCred.user.uid).set({
       email,
       role:"customer",
       createdAt:firebase.firestore.FieldValue.serverTimestamp()
     });
-    alert("✅ Account created! You can now login.");
-    toggleForm();
-  }catch(e){errorMsg.textContent=e.message;}
+    alert("✅ Account created!");
+  }catch(e){ alert(e.message); }
 };
 </script>
 </body>
