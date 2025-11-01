@@ -3,48 +3,55 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Jeric POS - Admin Panel</title>
+<title>Jeric POS - Admin Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
 <style>
-body{font-family:'Poppins',sans-serif;background:#060f13;color:#fff;margin:0;min-height:100vh;}
-header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid rgba(0,255,204,0.2);background:rgba(0,255,204,0.05);}
-header h2{color:#00ffcc;margin:0;}
+body{font-family:'Poppins',sans-serif;background:#060f13;color:#fff;margin:0;}
+header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;background:rgba(0,255,204,0.05);border-bottom:1px solid rgba(0,255,204,0.2);}
+header h2{color:#00ffcc;}
 button{padding:8px 12px;border:none;border-radius:6px;cursor:pointer;font-weight:600;margin:2px;}
 .primary{background:#00ffcc;color:#000;}
 .danger{background:#ff4d4d;color:#fff;}
 .layout{display:flex;flex-wrap:wrap;gap:20px;padding:20px;}
 .panel{background:rgba(255,255,255,0.05);border:1px solid rgba(0,255,204,0.15);border-radius:10px;padding:16px;flex:1;min-width:300px;}
-input,select{width:100%;padding:10px;margin:6px 0;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;}
-h3{color:#00ffcc;border-bottom:1px solid rgba(0,255,204,0.15);padding-bottom:6px;}
-img{max-width:100%;border-radius:6px;margin-top:8px;}
+h3{color:#00ffcc;margin-top:0;}
+.card{background:rgba(0,255,204,0.1);padding:10px;margin-bottom:10px;border-radius:6px;color:#000;}
 .item{padding:8px;margin-top:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.05);background:rgba(255,255,255,0.03);}
+input,select{width:100%;padding:10px;margin:6px 0;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;}
+img{max-width:100%;border-radius:6px;margin-top:8px;}
 </style>
 </head>
 <body>
 <header>
-  <h2>Admin Panel</h2>
-  <div>
-    <button id="logoutBtn" class="danger">Logout</button>
-  </div>
+  <h2>Admin Dashboard</h2>
+  <button id="logoutBtn" class="danger">Logout</button>
 </header>
 
 <div class="layout">
-  <!-- Inventory / Products -->
+  <!-- Dashboard Summary -->
+  <div class="panel" style="flex:1 1 100%;">
+    <h3>Dashboard Summary</h3>
+    <div id="summary"></div>
+  </div>
+
+  <!-- Inventory Management -->
   <div class="panel" style="max-width:400px;">
     <h3>Add / Update Product</h3>
     <input id="pId" type="hidden">
     <input id="pName" placeholder="Product name">
     <input id="pPrice" type="number" placeholder="Price">
+    <input id="pStock" type="number" placeholder="Stock Quantity">
     <input id="pImageURL" placeholder="Image URL (optional)">
     <button id="saveBtn" class="primary">Save Product</button>
+
     <h3 style="margin-top:20px;">Product List</h3>
     <div id="productsList">Loading...</div>
   </div>
 
-  <!-- Orders / Users -->
+  <!-- Orders Management -->
   <div class="panel" style="flex:1;">
     <h3>Orders</h3>
-    <div id="ordersList" style="max-height:300px;overflow:auto;">Loading...</div>
+    <div id="ordersList" style="max-height:400px;overflow:auto;">Loading...</div>
 
     <h3 style="margin-top:20px;">Users</h3>
     <div id="usersList" style="max-height:300px;overflow:auto;">Loading...</div>
@@ -76,31 +83,53 @@ auth.onAuthStateChanged(async user=>{
   currentUser=user;
   const doc = await db.collection("users").doc(user.uid).get();
   if(!doc.exists || doc.data().role!=="admin"){ alert("Access denied."); await auth.signOut(); return location.href="index.html"; }
-  loadProducts(); loadOrders(); loadUsers();
+  loadSummary(); loadProducts(); loadOrders(); loadUsers();
 });
 
-// Save product
+// Logout
+document.getElementById("logoutBtn").onclick = () => auth.signOut().then(()=>location.href="index.html");
+
+// Dashboard Summary
+async function loadSummary(){
+  const summaryDiv=document.getElementById("summary");
+  const ordersSnap = await db.collection("orders").get();
+  const productsSnap = await db.collection("products").get();
+  const usersSnap = await db.collection("users").get();
+  const totalSales = ordersSnap.docs.reduce((a,b)=>a+b.data().total,0);
+  const pendingOrders = ordersSnap.docs.filter(o=>o.data().status==="pending").length;
+  summaryDiv.innerHTML = `
+    <div class="card">Total Sales: ₱${totalSales}</div>
+    <div class="card">Total Orders: ${ordersSnap.size}</div>
+    <div class="card">Pending Orders: ${pendingOrders}</div>
+    <div class="card">Total Customers: ${usersSnap.size}</div>
+    <div class="card">Total Products: ${productsSnap.size}</div>
+  `;
+}
+
+// Inventory Management
 document.getElementById("saveBtn").onclick = async () => {
-  const name = document.getElementById("pName").value.trim();
-  const price = parseFloat(document.getElementById("pPrice").value);
-  const imageURL = document.getElementById("pImageURL").value.trim();
-  const id = document.getElementById("pId").value;
-  if(!name||!price){alert("Fill all fields"); return;}
-  const data = {name,price,image:imageURL||"",updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+  const name=document.getElementById("pName").value.trim();
+  const price=parseFloat(document.getElementById("pPrice").value);
+  const stock=parseInt(document.getElementById("pStock").value);
+  const imageURL=document.getElementById("pImageURL").value.trim();
+  const id=document.getElementById("pId").value;
+  if(!name||!price||!stock){alert("Fill all fields"); return;}
+  const data={name,price,stock,image:imageURL||"",updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
   if(id){ await db.collection("products").doc(id).update(data); alert("✅ Product updated"); }
   else{ await db.collection("products").add({...data,createdAt:firebase.firestore.FieldValue.serverTimestamp()}); alert("✅ Product added"); }
-  clearForm(); loadProducts();
+  clearForm(); loadProducts(); loadSummary();
 };
 
 function clearForm(){
   document.getElementById("pId").value="";
   document.getElementById("pName").value="";
   document.getElementById("pPrice").value="";
+  document.getElementById("pStock").value="";
   document.getElementById("pImageURL").value="";
   document.getElementById("saveBtn").textContent="Save Product";
 }
 
-// Load products
+// Load Products
 async function loadProducts(){
   const list=document.getElementById("productsList");
   list.innerHTML="Loading...";
@@ -110,18 +139,19 @@ async function loadProducts(){
     const p=doc.data();
     const div=document.createElement("div");
     div.className="item";
-    div.innerHTML=`<strong>${p.name}</strong> ₱${p.price}<br>
+    div.innerHTML=`<strong>${p.name}</strong> ₱${p.price}<br>Stock: ${p.stock}<br>
                    <img src="${p.image||'https://via.placeholder.com/100'}" width="100"><br>
-                   <button class="primary" onclick="editProduct('${doc.id}','${p.name}',${p.price},'${p.image||''}')">Edit</button>
+                   <button class="primary" onclick="editProduct('${doc.id}','${p.name}',${p.price},${p.stock},'${p.image||''}')">Edit</button>
                    <button class="danger" onclick="deleteProduct('${doc.id}')">Delete</button>`;
     list.appendChild(div);
   });
 }
 
-function editProduct(id,name,price,image){
+function editProduct(id,name,price,stock,image){
   document.getElementById("pId").value=id;
   document.getElementById("pName").value=name;
   document.getElementById("pPrice").value=price;
+  document.getElementById("pStock").value=stock;
   document.getElementById("pImageURL").value=image;
   document.getElementById("saveBtn").textContent="Update Product";
   window.scrollTo(0,0);
@@ -130,10 +160,10 @@ function editProduct(id,name,price,image){
 async function deleteProduct(id){
   if(!confirm("Delete this product?")) return;
   await db.collection("products").doc(id).delete();
-  loadProducts();
+  loadProducts(); loadSummary();
 }
 
-// Load orders
+// Orders Management
 async function loadOrders(){
   const list=document.getElementById("ordersList");
   list.innerHTML="Loading...";
@@ -144,13 +174,9 @@ async function loadOrders(){
     const date=o.createdAt?o.createdAt.toDate().toLocaleString():"Unknown";
     const div=document.createElement("div");
     div.className="item";
-    div.innerHTML=`<strong>${o.userEmail}</strong><br>
-                   Total: ₱${o.total} — <em>${o.status}</em><br>
-                   Address: ${o.address}<br>
-                   Payment: ${o.payment}<br>
-                   <small>${date}</small>
-                   <br>
-                   <select onchange="updateOrderStatus('${doc.id}',this.value)">
+    div.innerHTML=`<strong>${o.userEmail}</strong><br>Total: ₱${o.total}<br>Status: ${o.status}<br>
+                   Address: ${o.address}<br>Payment: ${o.payment}<br><small>${date}</small>
+                   <br><select onchange="updateOrderStatus('${doc.id}',this.value)">
                      <option value="pending" ${o.status==="pending"?"selected":""}>Pending</option>
                      <option value="processing" ${o.status==="processing"?"selected":""}>Processing</option>
                      <option value="completed" ${o.status==="completed"?"selected":""}>Completed</option>
@@ -161,10 +187,10 @@ async function loadOrders(){
 
 async function updateOrderStatus(id,status){
   await db.collection("orders").doc(id).update({status});
-  loadOrders();
+  loadOrders(); loadSummary();
 }
 
-// Load users
+// Users Management
 async function loadUsers(){
   const list=document.getElementById("usersList");
   list.innerHTML="Loading...";
@@ -182,12 +208,9 @@ async function loadUsers(){
 
 async function makeAdmin(uid){
   if(!confirm("Make this user an admin?")) return;
-await db.collection("users").doc(uid).update({ role: "admin" });
-loadUsers();
+  await db.collection("users").doc(uid).update({role:"admin"});
+  loadUsers();
 }
-
-// Logout
-document.getElementById("logoutBtn").onclick = () => auth.signOut().then(() => location.href = "index.html");
 </script>
-
-</body> </html> ```
+</body>
+</html>
