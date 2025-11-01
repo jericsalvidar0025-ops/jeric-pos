@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Jeric POS - Shop</title>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 body{font-family:'Poppins',sans-serif;background:#0a1a22;color:#fff;margin:0;padding:0;}
 header{display:flex;justify-content:space-between;align-items:center;padding:16px;background:rgba(0,255,204,0.05);}
@@ -15,42 +14,36 @@ button{padding:6px 10px;border:none;border-radius:6px;cursor:pointer;font-weight
 .danger{background:#ff4d4d;color:#fff;}
 .layout{display:flex;flex-wrap:wrap;gap:20px;padding:20px;}
 .panel{background:rgba(255,255,255,0.05);border-radius:10px;padding:16px;flex:1;min-width:300px;max-height:600px;overflow:auto;}
-.product{padding:8px;margin:6px 0;border-radius:6px;border:1px solid rgba(255,255,255,0.05);background:rgba(255,255,255,0.03);transition:transform 0.2s,box-shadow 0.2s;}
-.product:hover{transform:scale(1.03);box-shadow:0 4px 20px rgba(0,255,204,0.3);}
-#cartList .item{padding:6px;margin:6px 0;border-radius:6px;border:1px solid rgba(255,255,255,0.05);background:rgba(255,255,255,0.03);}
-input,select{width:100%;padding:8px;margin:6px 0;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;}
+input,select,textarea{width:100%;padding:8px;margin:6px 0;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;}
+.item{padding:6px;margin:6px 0;border-radius:6px;border:1px solid rgba(255,255,255,0.05);background:rgba(255,255,255,0.03);}
+img{max-width:100px;border-radius:6px;}
+.cart-item{display:flex;justify-content:space-between;align-items:center;}
+.progress-bar{display:flex;justify-content:space-between;margin-top:6px;}
+.progress-bar div{width:30%;text-align:center;padding:4px;border-radius:6px;}
 </style>
 </head>
 <body>
 <header>
-  <h2>Jeric POS Shop</h2>
-  <div>
-    <span>Cart: <span id="cartCounter">0</span> items</span>
-    <button id="logoutBtn" class="danger">Logout</button>
-  </div>
+<h2>Jeric POS - Shop</h2>
+<div>
+  <button id="logoutBtn" class="danger">Logout</button>
+  <button id="viewCartBtn" class="primary">View Cart</button>
+</div>
 </header>
 
 <div class="layout">
   <!-- Products Panel -->
-  <div class="panel">
+  <div class="panel" style="flex:2;">
     <h3>Products</h3>
     <div id="productsList">Loading...</div>
   </div>
 
-  <!-- Cart Panel -->
-  <div class="panel">
-    <h3>Cart</h3>
-    <div id="cartList">Cart is empty</div>
-    <p>Total: ₱<span id="cartTotal">0</span></p>
-    <h4>Delivery Details</h4>
-    <input type="text" id="custAddress" placeholder="Delivery Address">
-    <select id="paymentMethod">
-      <option value="COD">Cash on Delivery</option>
-      <option value="GCash">GCash</option>
-    </select>
-    <button id="placeOrderBtn" class="primary">Place Order</button>
-    <h4>My Orders</h4>
-    <div id="myOrders">Loading...</div>
+  <!-- Cart / Order Tracking Panel -->
+  <div class="panel" style="flex:1;">
+    <h3>My Cart</h3>
+    <div id="cartList">Your cart is empty.</div>
+    <h3>Order Tracking</h3>
+    <div id="ordersTracking">Loading...</div>
   </div>
 </div>
 
@@ -59,6 +52,7 @@ input,select{width:100%;padding:8px;margin:6px 0;border-radius:6px;border:1px so
 <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore-compat.js"></script>
 
 <script>
+// Firebase setup
 const firebaseConfig = {
   apiKey: "AIzaSyDd_04phC5KuoSnpC-mg6ASGFlRVX_d4Dk",
   authDomain: "jeric-pos.firebaseapp.com",
@@ -74,116 +68,126 @@ const db=firebase.firestore();
 let currentUser=null;
 let cart=[];
 
-// Auth check
+// Auth
 auth.onAuthStateChanged(async user=>{
   if(!user) return location.href="index.html";
   currentUser=user;
-  loadProducts(); loadMyOrders();
+  loadProducts();
+  loadCart();
+  trackOrders();
 });
 
 // Logout
 document.getElementById("logoutBtn").onclick=()=>auth.signOut().then(()=>location.href="index.html");
 
-// Load products
+// --- Load Products ---
 async function loadProducts(){
   const list=document.getElementById("productsList");
-  db.collection("products").onSnapshot(snapshot=>{
+  list.innerHTML="Loading...";
+  db.collection("products").orderBy("createdAt","desc").onSnapshot(snapshot=>{
     list.innerHTML="";
     snapshot.forEach(doc=>{
       const p=doc.data();
       const div=document.createElement("div");
-      div.className="product";
-      div.innerHTML=`<strong>${p.name}</strong> - ₱${p.price} (Stock: ${p.stock})<br>
-        <img src="${p.image||'https://via.placeholder.com/100'}" width="100"><br>
-        <button class="primary" onclick="addToCart('${doc.id}','${p.name}',${p.price},${p.stock})">Add to Cart</button>`;
+      div.className="item";
+      div.innerHTML=`<strong>${p.name}</strong> - ₱${p.price} - Stock:${p.stock}<br>
+      <img src="${p.image||'https://via.placeholder.com/100'}">
+      <button class="primary" onclick="addToCart('${doc.id}','${p.name}',${p.price},${p.stock})">Add to Cart</button>`;
       list.appendChild(div);
     });
   });
 }
 
-// Cart functions
+// --- Cart ---
 function addToCart(id,name,price,stock){
-  const existing=cart.find(i=>i.id===id);
-  if(existing){ 
-    if(existing.qty<stock) existing.qty++; 
-    else return alert("Stock limit reached"); 
+  const existing=cart.find(c=>c.id===id);
+  if(existing){
+    if(existing.qty>=stock) return alert("No more stock available");
+    existing.qty++;
   } else cart.push({id,name,price,qty:1,stock});
-  renderCart();
+  loadCart();
 }
 
-function renderCart(){
+function loadCart(){
   const list=document.getElementById("cartList");
+  if(cart.length===0) return list.innerHTML="Your cart is empty.";
   list.innerHTML="";
-  if(cart.length===0){ list.textContent="Cart is empty"; document.getElementById("cartCounter").textContent=0; document.getElementById("cartTotal").textContent=0; return;}
-  let total=0;
-  cart.forEach(i=>{
-    total+=i.price*i.qty;
+  cart.forEach(c=>{
     const div=document.createElement("div");
-    div.className="item";
-    div.innerHTML=`${i.name} x ${i.qty} - ₱${i.price*i.qty}
-      <button class="danger" onclick="removeFromCart('${i.id}')">Remove</button>`;
+    div.className="cart-item";
+    div.innerHTML=`${c.name} x${c.qty} - ₱${c.price*c.qty} 
+    <button class="danger" onclick="removeFromCart('${c.id}')">Remove</button>`;
     list.appendChild(div);
   });
-  document.getElementById("cartCounter").textContent=cart.reduce((a,b)=>a+b.qty,0);
-  document.getElementById("cartTotal").textContent=total.toFixed(2);
+  const checkoutBtn=document.createElement("button");
+  checkoutBtn.className="primary";
+  checkoutBtn.textContent="Checkout";
+  checkoutBtn.onclick=checkout;
+  list.appendChild(checkoutBtn);
 }
 
-function removeFromCart(id){ cart=cart.filter(i=>i.id!==id); renderCart();}
+function removeFromCart(id){
+  cart=cart.filter(c=>c.id!==id);
+  loadCart();
+}
 
-// Place order
-document.getElementById("placeOrderBtn").onclick=async()=>{
+// --- Checkout ---
+async function checkout(){
   if(cart.length===0) return alert("Cart is empty");
-  const address=document.getElementById("custAddress").value.trim();
-  const payment=document.getElementById("paymentMethod").value;
-  if(!address) return alert("Enter delivery address");
-  const orderData={
+  const address=prompt("Enter your delivery address:");
+  if(!address) return alert("Delivery address required");
+  const payment=prompt("Payment method (Cash / GCash / Card):");
+  if(!payment) return alert("Payment option required");
+  
+  const total=cart.reduce((sum,c)=>sum+c.price*c.qty,0);
+  await db.collection("orders").add({
     userId:currentUser.uid,
     userEmail:currentUser.email,
     items:cart,
-    total:cart.reduce((a,b)=>a+b.price*b.qty,0),
+    total,
     address,
     payment,
     status:"pending",
     createdAt:firebase.firestore.FieldValue.serverTimestamp()
-  };
-  await db.collection("orders").add(orderData);
-  cart=[]; renderCart(); document.getElementById("custAddress").value=""; alert("Order placed!");
-};
-
-// My Orders & tracking
-function loadMyOrders(){
-  const list=document.getElementById("myOrders");
-  db.collection("orders").where("userId","==",auth.currentUser.uid).orderBy("createdAt","desc").onSnapshot(snapshot=>{
-    list.innerHTML="";
-    snapshot.forEach(doc=>{
-      const o=doc.data();
-      const div=document.createElement("div");
-      div.className="item";
-      div.innerHTML=`
-        <strong>Order ID:</strong> ${doc.id}<br>
-        Items: ${o.items.map(i=>i.name+" x"+i.qty).join(", ")}<br>
-        Total: ₱${o.total}<br>
-        Status: <span id="track-${doc.id}"></span>
-      `;
-      list.appendChild(div);
-      renderTracking(o,doc.id);
-    });
   });
+  alert("✅ Order placed successfully!");
+  cart=[];
+  loadCart();
 }
 
-function renderTracking(order,id){
-  const container=document.getElementById("track-"+id);
-  const stages=["pending","processing","completed"];
-  container.innerHTML="";
-  stages.forEach(s=>{
-    const span=document.createElement("span");
-    span.textContent=s.toUpperCase();
-    span.style.marginRight="6px";
-    span.style.padding="2px 6px";
-    span.style.borderRadius="6px";
-    span.style.backgroundColor=s===order.status?"#00ffcc":"rgba(255,255,255,0.1)";
-    container.appendChild(span);
-  });
+// --- Order Tracking ---
+function trackOrders(){
+  const container=document.getElementById("ordersTracking");
+  db.collection("orders").where("userId","==",currentUser.uid).orderBy("createdAt","desc")
+    .onSnapshot(snapshot=>{
+      container.innerHTML="";
+      if(snapshot.empty) return container.innerHTML="No orders yet.";
+      snapshot.forEach(doc=>{
+        const o=doc.data();
+        const div=document.createElement("div");
+        div.className="item";
+        div.innerHTML=`<strong>Order #${doc.id}</strong> - Total: ₱${o.total}`;
+        
+        const bar=document.createElement("div");
+        bar.className="progress-bar";
+        const stages=["pending","processing","completed"];
+        const colors={pending:"#ff4d4d",processing:"#ffcc00",completed:"#00ffcc"};
+        stages.forEach((stage,index)=>{
+          const step=document.createElement("div");
+          step.textContent=stage.toUpperCase();
+          step.style.backgroundColor=stages.indexOf(o.status)>=index ? colors[stage]:"rgba(255,255,255,0.1)";
+          bar.appendChild(step);
+        });
+        div.appendChild(bar);
+
+        const addr=document.createElement("small");
+        addr.style.display="block";
+        addr.textContent=`Delivery: ${o.address} | Payment: ${o.payment} | Status: ${o.status.toUpperCase()}`;
+        div.appendChild(addr);
+
+        container.appendChild(div);
+      });
+    });
 }
 </script>
 </body>
