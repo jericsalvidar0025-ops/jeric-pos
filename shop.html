@@ -6,17 +6,18 @@
 <title>Jeric POS - Shop</title>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
 <style>
-body{font-family:'Poppins',sans-serif;background:#0a1a22;color:#fff;margin:0;padding:0;}
-header{padding:16px;background:rgba(0,255,204,0.05);border-bottom:1px solid rgba(0,255,204,0.2);display:flex;justify-content:space-between;align-items:center;}
-header h2{color:#00ffcc;}
-button{padding:8px 12px;border:none;border-radius:6px;cursor:pointer;font-weight:600;margin:2px;}
-.primary{background:#00ffcc;color:#000;}
-.layout{display:flex;flex-wrap:wrap;gap:20px;padding:20px;}
-.products,.cart{background:rgba(255,255,255,0.05);border:1px solid rgba(0,255,204,0.15);border-radius:10px;padding:16px;flex:1;min-width:300px;}
-input,select{width:100%;padding:10px;margin:6px 0;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;}
-.item{padding:8px;margin-top:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.05);background:rgba(255,255,255,0.03);}
-h3{color:#00ffcc;margin-top:0;}
-.receipt{background:rgba(0,255,204,0.1);padding:10px;margin-top:10px;border-radius:6px;color:#000;}
+body { font-family:'Poppins',sans-serif; background:#0a1a22; color:#fff; margin:0; padding:0; }
+header { display:flex; justify-content:space-between; align-items:center; padding:16px; background:rgba(0,255,204,0.05); border-bottom:1px solid rgba(0,255,204,0.2);}
+header h2 { color:#00ffcc; margin:0; }
+button { padding:8px 12px; border:none; border-radius:6px; cursor:pointer; font-weight:600; margin:2px; }
+.primary { background:#00ffcc; color:#000; }
+.layout { display:flex; flex-wrap:wrap; gap:20px; padding:20px; }
+.products, .cart { background:rgba(255,255,255,0.05); border:1px solid rgba(0,255,204,0.15); border-radius:10px; padding:16px; flex:1; min-width:300px; }
+.item { padding:10px; margin-top:6px; border-radius:6px; border:1px solid rgba(255,255,255,0.05); background:rgba(255,255,255,0.03); }
+h3 { color:#00ffcc; margin-top:0; }
+.cart-item { display:flex; justify-content:space-between; margin-bottom:6px; }
+.cart-total { font-weight:600; margin-top:10px; }
+.receipt { background:rgba(0,255,204,0.1); padding:10px; margin-top:10px; border-radius:6px; color:#000; }
 </style>
 </head>
 <body>
@@ -36,7 +37,7 @@ h3{color:#00ffcc;margin-top:0;}
   <div class="cart">
     <h3>Shopping Cart</h3>
     <div id="cartItems">No items yet</div>
-    <strong>Total: ₱<span id="cartTotal">0</span></strong>
+    <div class="cart-total">Total: ₱<span id="cartTotal">0</span></div>
     <input type="text" id="customerAddress" placeholder="Delivery Address">
     <select id="paymentMethod">
       <option value="cash">Cash on Delivery</option>
@@ -63,77 +64,92 @@ const firebaseConfig = {
   projectId: "jeric-pos",
   storageBucket: "jeric-pos.appspot.com",
   messagingSenderId: "294868456105",
-  appId: "1:294868456105:web:03c3e18a7037afbad80fb8",
-  measurementId: "G-3HXS3DFFMB"
+  appId: "1:294868456105:web:03c3e18a7037afbad80fb8"
 };
 firebase.initializeApp(firebaseConfig);
-const auth=firebase.auth();
-const db=firebase.firestore();
+const auth = firebase.auth();
+const db = firebase.firestore();
 
-let currentUser=null;
-let cart=[];
+let currentUser = null;
+let cart = [];
 
-auth.onAuthStateChanged(async user=>{
+auth.onAuthStateChanged(async user => {
   if(!user) return location.href="index.html";
-  currentUser=user;
+  currentUser = user;
   loadProducts();
   loadMyOrders();
 });
 
 // Logout
-document.getElementById("logoutBtn").onclick = () => auth.signOut().then(()=>location.href="index.html");
+document.getElementById("logoutBtn").onclick = () => auth.signOut().then(() => location.href="index.html");
 
 // Load products
-async function loadProducts(){
-  const list=document.getElementById("productsList");
-  list.innerHTML="Loading...";
-  const snap=await db.collection("products").orderBy("createdAt","desc").get();
-  list.innerHTML="";
-  snap.forEach(doc=>{
-    const p=doc.data();
-    const div=document.createElement("div");
-    div.className="item";
-    div.innerHTML=`<strong>${p.name}</strong> ₱${p.price}<br>
-                   <img src="${p.image||'https://via.placeholder.com/100'}" width="100"><br>
-                   <button class="primary">Add to Cart</button>`;
-    div.querySelector("button").onclick = () => addToCart(doc.id,p.name,p.price);
+async function loadProducts() {
+  const list = document.getElementById("productsList");
+  list.innerHTML = "Loading...";
+  const snap = await db.collection("products").orderBy("createdAt","desc").get();
+  list.innerHTML = "";
+  snap.forEach(doc => {
+    const p = doc.data();
+    const div = document.createElement("div");
+    div.className = "item";
+    div.innerHTML = `
+      <strong>${p.name}</strong> ₱${p.price}<br>
+      Stock: ${p.stock}<br>
+      <img src="${p.image||'https://via.placeholder.com/100'}" width="100"><br>
+      <button class="primary">Add to Cart</button>
+    `;
+    div.querySelector("button").onclick = () => addToCart(doc.id,p.name,p.price,p.stock);
     list.appendChild(div);
   });
 }
 
 // Cart functions
-function addToCart(id,name,price){ cart.push({id,name,price}); renderCart(); }
+function addToCart(id,name,price,stock){
+  if(cart.filter(i=>i.id===id).length>=stock){ alert("Not enough stock"); return; }
+  cart.push({id,name,price});
+  renderCart();
+}
+
 function removeItem(index){ cart.splice(index,1); renderCart(); }
 
 function renderCart(){
-  const cartDiv=document.getElementById("cartItems");
-  const totalSpan=document.getElementById("cartTotal");
+  const cartDiv = document.getElementById("cartItems");
+  const totalSpan = document.getElementById("cartTotal");
   if(cart.length===0){ cartDiv.innerHTML="No items yet"; totalSpan.textContent="0"; return;}
-  let html="";
-  let total=0;
-  cart.forEach((c,i)=>{ total+=c.price; html+=`${c.name} - ₱${c.price} <button onclick="removeItem(${i})">Remove</button><br>`; });
-  cartDiv.innerHTML=html;
-  totalSpan.textContent=total;
+  let html = "";
+  let total = 0;
+  cart.forEach((c,i)=>{ total+=c.price; html+=`<div class="cart-item">${c.name} ₱${c.price} <button onclick="removeItem(${i})">Remove</button></div>`; });
+  cartDiv.innerHTML = html;
+  totalSpan.textContent = total;
 }
 
 // Place order
-document.getElementById("placeOrderBtn").onclick = async ()=>{
-  const address=document.getElementById("customerAddress").value.trim();
-  const payment=document.getElementById("paymentMethod").value;
-  if(cart.length===0){alert("Cart is empty");return;}
-  if(!address){alert("Enter delivery address");return;}
-  const total=cart.reduce((a,b)=>a+b.price,0);
+document.getElementById("placeOrderBtn").onclick = async () => {
+  const address = document.getElementById("customerAddress").value.trim();
+  const payment = document.getElementById("paymentMethod").value;
+  if(cart.length===0){ alert("Cart is empty"); return; }
+  if(!address){ alert("Enter delivery address"); return; }
+  const total = cart.reduce((a,b)=>a+b.price,0);
 
   const orderRef = await db.collection("orders").add({
-    userId:currentUser.uid,
-    userEmail:currentUser.email,
-    items:cart,
+    userId: currentUser.uid,
+    userEmail: currentUser.email,
+    items: cart,
     total,
     address,
     payment,
     status:"pending",
-    createdAt:firebase.firestore.FieldValue.serverTimestamp()
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
+
+  // Reduce stock
+  const batch = db.batch();
+  cart.forEach(item => {
+    const prodRef = db.collection("products").doc(item.id);
+    batch.update(prodRef, {stock: firebase.firestore.FieldValue.increment(-1)});
+  });
+  await batch.commit();
 
   // Generate receipt
   let receiptHTML = `<div class="receipt"><strong>Receipt</strong><br>Order ID: ${orderRef.id}<br>`;
@@ -141,23 +157,29 @@ document.getElementById("placeOrderBtn").onclick = async ()=>{
   receiptHTML+=`<strong>Total: ₱${total}</strong><br>Address: ${address}<br>Payment: ${payment}</div>`;
   document.getElementById("receipt").innerHTML = receiptHTML;
 
-  cart=[]; renderCart();
-  document.getElementById("customerAddress").value="";
+  cart=[]; renderCart(); document.getElementById("customerAddress").value="";
   loadMyOrders();
 }
 
-// Load my orders
+// Load my orders with real-time tracking
 function loadMyOrders(){
-  const myOrdersDiv=document.getElementById("myOrders");
+  const myOrdersDiv = document.getElementById("myOrders");
   db.collection("orders").where("userId","==",currentUser.uid).orderBy("createdAt","desc")
-    .onSnapshot(snapshot=>{
+    .onSnapshot(snapshot => {
       myOrdersDiv.innerHTML="";
-      snapshot.forEach(doc=>{
-        const o=doc.data();
-        const date=o.createdAt?o.createdAt.toDate().toLocaleString():"Unknown";
-        const div=document.createElement("div");
+      snapshot.forEach(doc => {
+        const o = doc.data();
+        const date = o.createdAt? o.createdAt.toDate().toLocaleString():"Unknown";
+        const div = document.createElement("div");
         div.className="item";
-        div.innerHTML=`Total: ₱${o.total}<br>Status: <em>${o.status}</em><br>Address: ${o.address}<br>Payment: ${o.payment}<br><small>${date}</small>`;
+        div.innerHTML = `
+          <strong>Order ID:</strong> ${doc.id}<br>
+          Total: ₱${o.total}<br>
+          Status: <em>${o.status}</em><br>
+          Address: ${o.address}<br>
+          Payment: ${o.payment}<br>
+          <small>${date}</small>
+        `;
         myOrdersDiv.appendChild(div);
       });
     });
