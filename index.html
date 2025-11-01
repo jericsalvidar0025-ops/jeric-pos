@@ -28,20 +28,20 @@ button{width:100%;padding:10px;margin:6px 0;border:none;border-radius:6px;cursor
 <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore-compat.js"></script>
 
 <script>
-// Firebase config
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyDd_04phC5KuoSnpC-mg6ASGFlRVX_d4Dk",
+  authDomain: "jeric-pos.firebaseapp.com",
+  projectId: "jeric-pos",
+  storageBucket: "jeric-pos.appspot.com",
+  messagingSenderId: "294868456105",
+  appId: "1:294868456105:web:03c3e18a7037afbad80fb8",
+  measurementId: "G-3HXS3DFFMB"
 };
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-// Redirect logged in users
+// Redirect logged in users based on role
 auth.onAuthStateChanged(async user => {
   if(!user) return;
   const doc = await db.collection("users").doc(user.uid).get();
@@ -53,22 +53,20 @@ auth.onAuthStateChanged(async user => {
 
 // Login
 document.getElementById("loginBtn").onclick = async () => {
-  const email=document.getElementById("email").value.trim();
-  const password=document.getElementById("password").value;
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value;
   if(!email||!password){ alert("Fill all fields"); return; }
-  try{
-    await auth.signInWithEmailAndPassword(email,password);
-  }catch(e){ alert(e.message); }
+  try { await auth.signInWithEmailAndPassword(email,password); }
+  catch(e){ alert(e.message); }
 };
 
 // Register
 document.getElementById("registerBtn").onclick = async () => {
-  const email=document.getElementById("email").value.trim();
-  const password=document.getElementById("password").value;
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value;
   if(!email||!password){ alert("Fill all fields"); return; }
   try{
     const userCred = await auth.createUserWithEmailAndPassword(email,password);
-    // Save user data
     await db.collection("users").doc(userCred.user.uid).set({
       email,
       role:"customer",
