@@ -15,6 +15,8 @@ button{padding:8px 12px;border:none;border-radius:6px;cursor:pointer;font-weight
 .products,.cart{background:rgba(255,255,255,0.05);border:1px solid rgba(0,255,204,0.15);border-radius:10px;padding:16px;flex:1;min-width:300px;}
 input,select{width:100%;padding:10px;margin:6px 0;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;}
 .item{padding:8px;margin-top:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.05);background:rgba(255,255,255,0.03);}
+h3{color:#00ffcc;margin-top:0;}
+.receipt{background:rgba(0,255,204,0.1);padding:10px;margin-top:10px;border-radius:6px;color:#000;}
 </style>
 </head>
 <body>
@@ -24,20 +26,28 @@ input,select{width:100%;padding:10px;margin:6px 0;border-radius:6px;border:1px s
 </header>
 
 <div class="layout">
+  <!-- Products -->
   <div class="products">
     <h3>Products</h3>
     <div id="productsList">Loading...</div>
   </div>
+
+  <!-- Cart & Orders -->
   <div class="cart">
-    <h3>Cart & Orders</h3>
+    <h3>Shopping Cart</h3>
     <div id="cartItems">No items yet</div>
+    <strong>Total: ₱<span id="cartTotal">0</span></strong>
     <input type="text" id="customerAddress" placeholder="Delivery Address">
     <select id="paymentMethod">
       <option value="cash">Cash on Delivery</option>
       <option value="gcash">GCash</option>
     </select>
     <button id="placeOrderBtn" class="primary">Place Order</button>
-    <h4>My Orders</h4>
+
+    <h3>Receipt</h3>
+    <div id="receipt"></div>
+
+    <h3>My Orders</h3>
     <div id="myOrders">Loading...</div>
   </div>
 </div>
@@ -70,6 +80,9 @@ auth.onAuthStateChanged(async user=>{
   loadMyOrders();
 });
 
+// Logout
+document.getElementById("logoutBtn").onclick = () => auth.signOut().then(()=>location.href="index.html");
+
 // Load products
 async function loadProducts(){
   const list=document.getElementById("productsList");
@@ -83,31 +96,35 @@ async function loadProducts(){
     div.innerHTML=`<strong>${p.name}</strong> ₱${p.price}<br>
                    <img src="${p.image||'https://via.placeholder.com/100'}" width="100"><br>
                    <button class="primary">Add to Cart</button>`;
-    div.querySelector("button").onclick=()=>addToCart(doc.id,p.name,p.price);
+    div.querySelector("button").onclick = () => addToCart(doc.id,p.name,p.price);
     list.appendChild(div);
   });
 }
 
-// Cart
+// Cart functions
 function addToCart(id,name,price){ cart.push({id,name,price}); renderCart(); }
-function renderCart(){
-  const cartDiv=document.getElementById("cartItems");
-  if(cart.length===0){cartDiv.innerHTML="No items yet"; return;}
-  let html="",total=0;
-  cart.forEach((c,i)=>{ total+=c.price; html+=`${c.name} - ₱${c.price} <button onclick="removeItem(${i})">Remove</button><br>`; });
-  html+=`<strong>Total: ₱${total}</strong>`;
-  cartDiv.innerHTML=html;
-}
 function removeItem(index){ cart.splice(index,1); renderCart(); }
 
+function renderCart(){
+  const cartDiv=document.getElementById("cartItems");
+  const totalSpan=document.getElementById("cartTotal");
+  if(cart.length===0){ cartDiv.innerHTML="No items yet"; totalSpan.textContent="0"; return;}
+  let html="";
+  let total=0;
+  cart.forEach((c,i)=>{ total+=c.price; html+=`${c.name} - ₱${c.price} <button onclick="removeItem(${i})">Remove</button><br>`; });
+  cartDiv.innerHTML=html;
+  totalSpan.textContent=total;
+}
+
 // Place order
-document.getElementById("placeOrderBtn").onclick=async()=>{
+document.getElementById("placeOrderBtn").onclick = async ()=>{
   const address=document.getElementById("customerAddress").value.trim();
   const payment=document.getElementById("paymentMethod").value;
   if(cart.length===0){alert("Cart is empty");return;}
   if(!address){alert("Enter delivery address");return;}
   const total=cart.reduce((a,b)=>a+b.price,0);
-  await db.collection("orders").add({
+
+  const orderRef = await db.collection("orders").add({
     userId:currentUser.uid,
     userEmail:currentUser.email,
     items:cart,
@@ -117,28 +134,34 @@ document.getElementById("placeOrderBtn").onclick=async()=>{
     status:"pending",
     createdAt:firebase.firestore.FieldValue.serverTimestamp()
   });
-  alert("✅ Order placed!");
+
+  // Generate receipt
+  let receiptHTML = `<div class="receipt"><strong>Receipt</strong><br>Order ID: ${orderRef.id}<br>`;
+  cart.forEach(i=> receiptHTML+=`${i.name} - ₱${i.price}<br>`);
+  receiptHTML+=`<strong>Total: ₱${total}</strong><br>Address: ${address}<br>Payment: ${payment}</div>`;
+  document.getElementById("receipt").innerHTML = receiptHTML;
+
   cart=[]; renderCart();
+  document.getElementById("customerAddress").value="";
   loadMyOrders();
 }
 
 // Load my orders
-async function loadMyOrders(){
-  const list=document.getElementById("myOrders");
-  const snap=await db.collection("orders").where("userId","==",currentUser.uid).orderBy("createdAt","desc").get();
-  list.innerHTML="";
-  snap.forEach(doc=>{
-    const o=doc.data();
-    const date=o.createdAt ? o.createdAt.toDate().toLocaleString() : "Unknown";
-    const div=document.createElement("div");
-    div.className="item";
-    div.innerHTML=`Total: ₱${o.total}<br>Status: <em>${o.status}</em><br>Address: ${o.address}<br>Payment: ${o.payment}<br><small>${date}</small>`;
-    list.appendChild(div);
-  });
+function loadMyOrders(){
+  const myOrdersDiv=document.getElementById("myOrders");
+  db.collection("orders").where("userId","==",currentUser.uid).orderBy("createdAt","desc")
+    .onSnapshot(snapshot=>{
+      myOrdersDiv.innerHTML="";
+      snapshot.forEach(doc=>{
+        const o=doc.data();
+        const date=o.createdAt?o.createdAt.toDate().toLocaleString():"Unknown";
+        const div=document.createElement("div");
+        div.className="item";
+        div.innerHTML=`Total: ₱${o.total}<br>Status: <em>${o.status}</em><br>Address: ${o.address}<br>Payment: ${o.payment}<br><small>${date}</small>`;
+        myOrdersDiv.appendChild(div);
+      });
+    });
 }
-
-// Logout
-document.getElementById("logoutBtn").onclick=()=>auth.signOut().then(()=>location.href="index.html");
 </script>
 </body>
 </html>
