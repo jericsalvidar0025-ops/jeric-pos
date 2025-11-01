@@ -3,9 +3,157 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Jeric POS - Admin Dashboard</title>
+<title>Jeric POS - Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+<style>
+body{font-family:'Poppins',sans-serif;background:#0a1a22;color:#fff;margin:0;padding:0;}
+header{padding:16px;background:rgba(0,255,204,0.05);border-bottom:1px solid rgba(0,255,204,0.2);display:flex;justify-content:space-between;align-items:center;}
+header h2{color:#00ffcc;}
+button{padding:8px 12px;border:none;border-radius:6px;cursor:pointer;font-weight:600;margin:2px;}
+.primary{background:#00ffcc;color:#000;}
+.danger{background:#ff4d4d;color:#fff;}
+.layout{display:flex;flex-wrap:wrap;gap:20px;padding:20px;}
+.panel{background:rgba(255,255,255,0.05);border:1px solid rgba(0,255,204,0.15);border-radius:10px;padding:16px;flex:1;min-width:300px;max-height:500px;overflow:auto;}
+.item{padding:8px;margin-top:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.05);background:rgba(255,255,255,0.03);}
+h3{color:#00ffcc;border-bottom:1px solid rgba(0,255,204,0.15);padding-bottom:6px;}
+</style>
 </head>
 <body>
-<h1>Admin Page Full Functional Placeholder</h1>
+<header>
+  <h2>Admin Dashboard</h2>
+  <button id="logoutBtn" class="danger">Logout</button>
+</header>
+
+<div class="layout">
+  <!-- Inventory -->
+  <div class="panel">
+    <h3>Inventory</h3>
+    <div id="productsList">Loading...</div>
+  </div>
+
+  <!-- Orders -->
+  <div class="panel">
+    <h3>Orders</h3>
+    <div id="ordersList">Loading...</div>
+  </div>
+
+  <!-- Users -->
+  <div class="panel">
+    <h3>Users</h3>
+    <div id="usersList">Loading...</div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore-compat.js"></script>
+
+<script>
+// Firebase config
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+let currentUser = null;
+
+auth.onAuthStateChanged(async user=>{
+  if(!user) return location.href="index.html";
+  currentUser=user;
+  const doc=await db.collection("users").doc(user.uid).get();
+  if(!doc.exists || doc.data().role!=="admin"){
+    alert("Access denied"); 
+    auth.signOut();
+    return location.href="index.html";
+  }
+  loadProducts();
+  loadOrders();
+  loadUsers();
+});
+
+// Load Products
+async function loadProducts(){
+  const list=document.getElementById("productsList");
+  list.innerHTML="Loading...";
+  const snap=await db.collection("products").orderBy("createdAt","desc").get();
+  list.innerHTML="";
+  snap.forEach(doc=>{
+    const p=doc.data();
+    const div=document.createElement("div");
+    div.className="item";
+    div.innerHTML=`<strong>${p.name}</strong> ₱${p.price} <br>
+                   Stock: ${p.stock || 'N/A'} <br>
+                   <img src="${p.image || 'https://via.placeholder.com/100'}" width="80">`;
+    list.appendChild(div);
+  });
+}
+
+// Load Orders
+async function loadOrders(){
+  const list=document.getElementById("ordersList");
+  list.innerHTML="Loading...";
+  const snap=await db.collection("orders").orderBy("createdAt","desc").limit(50).get();
+  list.innerHTML="";
+  snap.forEach(doc=>{
+    const o=doc.data();
+    const date=o.createdAt ? o.createdAt.toDate().toLocaleString() : "Unknown";
+    const div=document.createElement("div");
+    div.className="item";
+    div.innerHTML=`<strong>${o.userEmail}</strong> <br>
+                   Total: ₱${o.total} <br>
+                   Address: ${o.address} <br>
+                   Payment: ${o.payment} <br>
+                   Status: <em>${o.status || "pending"}</em> <br>
+                   <small>${date}</small><br>
+                   <button class="primary" onclick="updateStatus('${doc.id}','processing')">Mark Processing</button>
+                   <button class="primary" onclick="updateStatus('${doc.id}','completed')">Mark Completed</button>
+                   <button class="danger" onclick="deleteOrder('${doc.id}')">Delete</button>`;
+    list.appendChild(div);
+  });
+}
+
+async function updateStatus(id,status){
+  await db.collection("orders").doc(id).update({status});
+  loadOrders();
+}
+
+async function deleteOrder(id){
+  if(!confirm("Delete this order?")) return;
+  await db.collection("orders").doc(id).delete();
+  loadOrders();
+}
+
+// Load Users
+async function loadUsers(){
+  const list=document.getElementById("usersList");
+  list.innerHTML="Loading...";
+  const snap=await db.collection("users").orderBy("createdAt","desc").get();
+  list.innerHTML="";
+  snap.forEach(doc=>{
+    const u=doc.data();
+    const div=document.createElement("div");
+    div.className="item";
+    div.innerHTML=`${u.email} — <span style="color:#00ffcc;">${u.role || "customer"}</span>
+                   <button class="primary" onclick="makeAdmin('${doc.id}')">Make Admin</button>`;
+    list.appendChild(div);
+  });
+}
+
+async function makeAdmin(uid){
+  if(!confirm("Make this user an admin?")) return;
+  await db.collection("users").doc(uid).update({role:"admin"});
+  loadUsers();
+}
+
+// Logout
+document.getElementById("logoutBtn").onclick=()=>auth.signOut().then(()=>location.href="index.html");
+</script>
 </body>
 </html>
