@@ -14,14 +14,10 @@ button { padding:6px 10px; border:none; border-radius:6px; cursor:pointer; font-
 .primary { background:#00ffcc; color:#000; }
 .danger { background:#ff4d4d; color:#fff; }
 .layout { display:flex; flex-wrap:wrap; gap:20px; padding:20px; }
-.panel { background:rgba(255,255,255,0.05); border:1px solid rgba(0,255,204,0.15); border-radius:10px; padding:16px; flex:1; min-width:300px; }
-h3 { color:#00ffcc; margin-top:0; }
-input, select { width:100%; padding:8px; margin:4px 0; border-radius:6px; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.05); color:#fff; }
-img { max-width:100px; border-radius:6px; }
-.item { padding:8px; margin-top:6px; border-radius:6px; border:1px solid rgba(255,255,255,0.05); background:rgba(255,255,255,0.03); }
-table { width:100%; border-collapse:collapse; margin-top:10px; }
-th, td { padding:6px; text-align:left; border-bottom:1px solid rgba(255,255,255,0.1); color:#fff; }
-th { color:#00ffcc; }
+.panel { background:rgba(255,255,255,0.05); border-radius:10px; padding:16px; flex:1; min-width:300px; max-height:600px; overflow:auto; }
+h3 { color:#00ffcc; border-bottom:1px solid rgba(0,255,204,0.15); padding-bottom:6px; }
+input, select { width:100%; padding:8px; margin:6px 0; border-radius:6px; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.05); color:#fff; }
+.item { padding:6px; margin:6px 0; border-radius:6px; border:1px solid rgba(255,255,255,0.05); background:rgba(255,255,255,0.03); }
 </style>
 </head>
 <body>
@@ -29,58 +25,44 @@ th { color:#00ffcc; }
   <h2>Admin Panel</h2>
   <div>
     <button id="logoutBtn" class="danger">Logout</button>
-    <button id="backBtn" class="primary">Go to Shop</button>
   </div>
 </header>
 
 <div class="layout">
+
   <!-- Dashboard -->
-  <div class="panel" style="flex:1 1 100%;">
-    <h3>Dashboard Summary</h3>
-    <div id="summary" style="display:flex; flex-wrap:wrap; gap:10px;"></div>
-    <canvas id="salesChart" style="background:#fff; border-radius:6px; margin-top:10px; height:200px;"></canvas>
+  <div class="panel">
+    <h3>Dashboard - Sales Summary</h3>
+    <canvas id="salesChart" height="200"></canvas>
+    <p>Total Sales: ₱<span id="totalSales">0</span></p>
   </div>
 
-  <!-- Products -->
-  <div class="panel" style="max-width:400px;">
+  <!-- Product Management -->
+  <div class="panel">
     <h3>Add / Update Product</h3>
-    <input id="pId" type="hidden">
-    <input id="pName" placeholder="Product name">
+    <input type="hidden" id="pId">
+    <input id="pName" placeholder="Product Name">
     <input id="pPrice" type="number" placeholder="Price">
     <input id="pStock" type="number" placeholder="Stock">
-    <input id="pImageURL" placeholder="Image URL">
+    <input id="pImageURL" placeholder="Image URL (Optional)">
     <button id="saveBtn" class="primary">Save Product</button>
 
-    <h3>Inventory</h3>
-    <table id="productsTable">
-      <thead>
-        <tr><th>Name</th><th>Price</th><th>Stock</th><th>Image</th><th>Actions</th></tr>
-      </thead>
-      <tbody></tbody>
-    </table>
+    <h3 style="margin-top:20px;">Products</h3>
+    <div id="productsList">Loading...</div>
   </div>
 
   <!-- Orders -->
   <div class="panel">
     <h3>Orders</h3>
-    <table id="ordersTable">
-      <thead>
-        <tr><th>Order ID</th><th>Items</th><th>Total</th><th>Status</th><th>Address</th><th>Payment</th><th>Action</th></tr>
-      </thead>
-      <tbody></tbody>
-    </table>
+    <div id="ordersList">Loading...</div>
   </div>
 
   <!-- Users -->
-  <div class="panel" style="flex:1 1 100%;">
+  <div class="panel">
     <h3>Users</h3>
-    <table id="usersTable">
-      <thead>
-        <tr><th>Email</th><th>Role</th><th>Action</th></tr>
-      </thead>
-      <tbody></tbody>
-    </table>
+    <div id="usersList">Loading...</div>
   </div>
+
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-app-compat.js"></script>
@@ -88,6 +70,7 @@ th { color:#00ffcc; }
 <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore-compat.js"></script>
 
 <script>
+// Firebase setup
 const firebaseConfig = {
   apiKey: "AIzaSyDd_04phC5KuoSnpC-mg6ASGFlRVX_d4Dk",
   authDomain: "jeric-pos.firebaseapp.com",
@@ -101,36 +84,32 @@ const auth=firebase.auth();
 const db=firebase.firestore();
 
 let currentUser=null;
-let salesChart=null;
 
+// Auth check
 auth.onAuthStateChanged(async user=>{
   if(!user) return location.href="index.html";
   currentUser=user;
   const doc=await db.collection("users").doc(user.uid).get();
   if(!doc.exists || doc.data().role!=="admin"){ alert("Access denied"); await auth.signOut(); return location.href="index.html"; }
-  loadSummary();
-  loadProducts();
-  loadOrders();
-  loadUsers();
+  loadProducts(); loadOrders(); loadUsers(); loadSalesChart();
 });
 
-document.getElementById("logoutBtn").onclick = ()=>auth.signOut().then(()=>location.href="index.html");
-document.getElementById("backBtn").onclick = ()=>location.href="shop.html";
+// Logout
+document.getElementById("logoutBtn").onclick=()=>auth.signOut().then(()=>location.href="index.html");
 
-// Products
-document.getElementById("saveBtn").onclick=async ()=>{
-  const id=document.getElementById("pId").value;
+// -------- Products --------
+document.getElementById("saveBtn").onclick=async()=>{
   const name=document.getElementById("pName").value.trim();
   const price=parseFloat(document.getElementById("pPrice").value);
   const stock=parseInt(document.getElementById("pStock").value);
   const image=document.getElementById("pImageURL").value.trim();
-  if(!name || !price || isNaN(stock)) return alert("Fill all fields");
+  const id=document.getElementById("pId").value;
 
-  const data={name,price,stock,image,updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+  if(!name || !price || !stock){ alert("Fill all fields"); return; }
+  const data={name, price, stock, image, updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
   if(id) await db.collection("products").doc(id).update(data);
-  else await db.collection("products").add({...data,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
-
-  clearForm(); loadProducts(); loadSummary();
+  else await db.collection("products").add({...data, createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+  clearForm(); loadProducts();
 };
 
 function clearForm(){
@@ -143,17 +122,21 @@ function clearForm(){
 }
 
 async function loadProducts(){
-  const tbody=document.getElementById("productsTable").querySelector("tbody");
-  db.collection("products").orderBy("createdAt","desc").onSnapshot(snapshot=>{
-    tbody.innerHTML="";
-    snapshot.forEach(doc=>{
-      const p=doc.data();
-      const tr=document.createElement("tr");
-      tr.innerHTML=`<td>${p.name}</td><td>${p.price}</td><td>${p.stock}</td><td><img src="${p.image||'https://via.placeholder.com/50'}"></td>
-      <td><button class="primary" onclick="editProduct('${doc.id}','${p.name}',${p.price},${p.stock},'${p.image||''}')">Edit</button>
-      <button class="danger" onclick="deleteProduct('${doc.id}')">Delete</button></td>`;
-      tbody.appendChild(tr);
-    });
+  const list=document.getElementById("productsList");
+  const snap=await db.collection("products").orderBy("name").get();
+  list.innerHTML="";
+  snap.forEach(doc=>{
+    const p=doc.data();
+    const div=document.createElement("div");
+    div.className="item";
+    div.innerHTML=`
+      <strong>${p.name}</strong> - ₱${p.price} (Stock: ${p.stock})
+      <br><img src="${p.image||'https://via.placeholder.com/100'}" width="100">
+      <br>
+      <button class="primary" onclick="editProduct('${doc.id}','${p.name}',${p.price},${p.stock},'${p.image||''}')">Edit</button>
+      <button class="danger" onclick="deleteProduct('${doc.id}')">Delete</button>
+    `;
+    list.appendChild(div);
   });
 }
 
@@ -166,89 +149,82 @@ function editProduct(id,name,price,stock,image){
   document.getElementById("saveBtn").textContent="Update Product";
 }
 
-async function deleteProduct(id){ if(!confirm("Delete this product?")) return; await db.collection("products").doc(id).delete(); loadProducts(); loadSummary(); }
+async function deleteProduct(id){ if(!confirm("Delete product?")) return; await db.collection("products").doc(id).delete(); loadProducts(); }
 
-// Orders
+// -------- Orders --------
 async function loadOrders(){
-  const tbody=document.getElementById("ordersTable").querySelector("tbody");
+  const list=document.getElementById("ordersList");
   db.collection("orders").orderBy("createdAt","desc").onSnapshot(snapshot=>{
-    tbody.innerHTML="";
+    list.innerHTML="";
     snapshot.forEach(doc=>{
       const o=doc.data();
-      const tr=document.createElement("tr");
-      tr.innerHTML=`<td>${doc.id}</td>
-        <td>${o.items.map(i=>i.name).join(", ")}</td>
-        <td>${o.total}</td>
-        <td>
-          <select onchange="updateOrderStatus('${doc.id}',this.value)">
-            <option value="pending" ${o.status==="pending"?"selected":""}>Pending</option>
-            <option value="processing" ${o.status==="processing"?"selected":""}>Processing</option>
-            <option value="completed" ${o.status==="completed"?"selected":""}>Completed</option>
-            <option value="cancelled" ${o.status==="cancelled"?"selected":""}>Cancelled</option>
-          </select>
-        </td>
-        <td>${o.address}</td><td>${o.payment}</td>
-        <td><button class="danger" onclick="deleteOrder('${doc.id}')">Delete</button></td>`;
-      tbody.appendChild(tr);
+      const div=document.createElement("div");
+      div.className="item";
+      div.innerHTML=`
+        <strong>${o.userEmail}</strong><br>
+        Items: ${o.items.map(i=>i.name+" x"+i.qty).join(", ")}<br>
+        Total: ₱${o.total}<br>
+        Address: ${o.address}<br>
+        Payment: ${o.payment}<br>
+        Status: <select onchange="updateOrderStatus('${doc.id}',this.value)">
+          <option value="pending" ${o.status==="pending"?"selected":""}>Pending</option>
+          <option value="processing" ${o.status==="processing"?"selected":""}>Processing</option>
+          <option value="completed" ${o.status==="completed"?"selected":""}>Completed</option>
+        </select>
+      `;
+      list.appendChild(div);
     });
   });
 }
 
-async function updateOrderStatus(id,status){ await db.collection("orders").doc(id).update({status,updatedAt:firebase.firestore.FieldValue.serverTimestamp()}); loadSummary(); }
-async function deleteOrder(id){ if(!confirm("Delete this order?")) return; await db.collection("orders").doc(id).delete(); loadOrders(); loadSummary(); }
+async function updateOrderStatus(id,status){
+  await db.collection("orders").doc(id).update({status, updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+}
 
-// Users
+// -------- Users --------
 async function loadUsers(){
-  const tbody=document.getElementById("usersTable").querySelector("tbody");
+  const list=document.getElementById("usersList");
   db.collection("users").orderBy("createdAt","desc").onSnapshot(snapshot=>{
-    tbody.innerHTML="";
+    list.innerHTML="";
     snapshot.forEach(doc=>{
       const u=doc.data();
-      const tr=document.createElement("tr");
-      tr.innerHTML=`<td>${u.email}</td><td>${u.role||"customer"}</td>
-        <td>${u.role!=="admin"?`<button class="primary" onclick="makeAdmin('${doc.id}')">Make Admin</button>`:""}</td>`;
-      tbody.appendChild(tr);
+      const div=document.createElement("div");
+      div.className="item";
+      div.innerHTML=`${u.email} — <span style="color:#00ffcc;">${u.role||"customer"}</span>
+        ${u.role!=="admin"?`<button class="primary" onclick="makeAdmin('${doc.id}')">Make Admin</button>`:""}`;
+      list.appendChild(div);
     });
   });
 }
 
-async function makeAdmin(uid){ if(!confirm("Make this user an admin?")) return; await db.collection("users").doc(uid).update({role:"admin"}); loadUsers(); }
+async function makeAdmin(uid){ if(!confirm("Make this user admin?")) return; await db.collection("users").doc(uid).update({role:"admin"}); }
 
-// Dashboard summary
-async function loadSummary(){
-  const summaryDiv=document.getElementById("summary");
-  const ordersSnap=await db.collection("orders").get();
-  const productsSnap=await db.collection("products").get();
-  const usersSnap=await db.collection("users").get();
-
-  const totalSales = ordersSnap.docs.reduce((a,b)=>a+b.data().total,0);
-  const pendingOrders = ordersSnap.docs.filter(o=>o.data().status==="pending").length;
-
-  summaryDiv.innerHTML=`
-    <div class="item">Total Sales: ₱${totalSales}</div>
-    <div class="item">Total Orders: ${ordersSnap.size}</div>
-    <div class="item">Pending Orders: ${pendingOrders}</div>
-    <div class="item">Total Customers: ${usersSnap.size}</div>
-    <div class="item">Total Products: ${productsSnap.size}</div>
-  `;
-
-  // Sales chart
-  const salesByDate={};
-  ordersSnap.forEach(doc=>{
+// -------- Sales Dashboard --------
+async function loadSalesChart(){
+  const chartCtx=document.getElementById("salesChart").getContext("2d");
+  const snapshot=await db.collection("orders").get();
+  const salesPerDay={};
+  let total=0;
+  snapshot.forEach(doc=>{
     const o=doc.data();
-    if(!o.createdAt) return;
-    const dateStr=o.createdAt.toDate().toLocaleDateString();
-    salesByDate[dateStr]=(salesByDate[dateStr]||0)+o.total;
+    const date=o.createdAt?o.createdAt.toDate().toLocaleDateString():"Unknown";
+    if(!salesPerDay[date]) salesPerDay[date]=0;
+    salesPerDay[date]+=o.total;
+    total+=o.total;
   });
-
-  const labels=Object.keys(salesByDate).sort((a,b)=>new Date(a)-new Date(b));
-  const data=labels.map(d=>salesByDate[d]);
-
-  const ctx=document.getElementById('salesChart').getContext('2d');
-  if(window.salesChart) window.salesChart.destroy();
-  window.salesChart=new Chart(ctx,{
-    type:'line',
-    data:{labels, datasets:[{label:'Sales', data, borderColor:'#00ffcc', backgroundColor:'rgba(0,255,204,0.2)'}]},
+  document.getElementById("totalSales").textContent=total.toFixed(2);
+  new Chart(chartCtx,{
+    type:"line",
+    data:{
+      labels:Object.keys(salesPerDay),
+      datasets:[{
+        label:"Sales",
+        data:Object.values(salesPerDay),
+        borderColor:"#00ffcc",
+        backgroundColor:"rgba(0,255,204,0.2)",
+        fill:true
+      }]
+    },
     options:{responsive:true, maintainAspectRatio:false}
   });
 }
