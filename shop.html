@@ -48,12 +48,13 @@ input,select{width:100%;padding:10px;margin:6px 0;border-radius:6px;border:1px s
 
 <script>
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyDd_04phC5KuoSnpC-mg6ASGFlRVX_d4Dk",
+  authDomain: "jeric-pos.firebaseapp.com",
+  projectId: "jeric-pos",
+  storageBucket: "jeric-pos.appspot.com",
+  messagingSenderId: "294868456105",
+  appId: "1:294868456105:web:03c3e18a7037afbad80fb8",
+  measurementId: "G-3HXS3DFFMB"
 };
 firebase.initializeApp(firebaseConfig);
 const auth=firebase.auth();
@@ -87,11 +88,11 @@ async function loadProducts(){
   });
 }
 
-// Cart functions
+// Cart
 function addToCart(id,name,price){ cart.push({id,name,price}); renderCart(); }
 function renderCart(){
   const cartDiv=document.getElementById("cartItems");
-  if(cart.length===0){cartDiv.innerHTML="No items yet";return;}
+  if(cart.length===0){cartDiv.innerHTML="No items yet"; return;}
   let html="",total=0;
   cart.forEach((c,i)=>{ total+=c.price; html+=`${c.name} - ₱${c.price} <button onclick="removeItem(${i})">Remove</button><br>`; });
   html+=`<strong>Total: ₱${total}</strong>`;
@@ -131,11 +132,7 @@ async function loadMyOrders(){
     const date=o.createdAt ? o.createdAt.toDate().toLocaleString() : "Unknown";
     const div=document.createElement("div");
     div.className="item";
-    div.innerHTML=`Total: ₱${o.total}<br>
-                   Status: <em>${o.status}</em><br>
-                   Address: ${o.address}<br>
-                   Payment: ${o.payment}<br>
-                   <small>${date}</small>`;
+    div.innerHTML=`Total: ₱${o.total}<br>Status: <em>${o.status}</em><br>Address: ${o.address}<br>Payment: ${o.payment}<br><small>${date}</small>`;
     list.appendChild(div);
   });
 }
